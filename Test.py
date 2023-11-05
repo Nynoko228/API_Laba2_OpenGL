@@ -1,88 +1,74 @@
-import math
+import glfw
+from OpenGL.GL import *
+from OpenGL.GLUT import *
 import random
-import struct
 
-import GLWindow
-import ModernGL
+# Размер окна
+width, height = 800, 600
 
-# Window & Context
+# Количество капель дождя
+num_drops = 100
 
-wnd = GLWindow.create_window()
-ctx = ModernGL.create_context()
-
-tvert = ctx.vertex_shader('''
-    #version 330
-
-    uniform vec2 acc;
-
-    in vec2 in_pos;
-    in vec2 in_prev;
-
-    out vec2 out_pos;
-    out vec2 out_prev;
-
-    void main() {
-        out_pos = in_pos * 2.0 - in_prev + acc;
-        out_prev = in_pos;
-    }
-''')
-
-vert = ctx.vertex_shader('''
-    #version 330
-
-    in vec2 vert;
-
-    void main() {
-        gl_Position = vec4(vert, 0.0, 1.0);
-    }
-''')
-
-frag = ctx.fragment_shader('''
-    #version 330
-
-    out vec4 color;
-
-    void main() {
-        color = vec4(0.30, 0.50, 1.00, 1.0);
-    }
-''')
-
-prog = ctx.program([vert, frag])
-
-transform = ctx.program(tvert, ['out_pos', 'out_prev'])
+# Координаты и скорость каждой капли дождя
+raindrops = [{'x': random.uniform(0, width), 'y': random.uniform(0, height), 'speed': random.uniform(50, 200)} for _ in
+             range(num_drops)]
 
 
-def particle():
-    a = random.uniform(0.0, math.pi * 2.0)
-    r = random.uniform(0.0, 0.001)
+def draw_raindrop(x, y):
+    glBegin(GL_LINES)
+    glVertex2f(x, y)
+    glVertex2f(x, y + 10)
+    glEnd()
 
-    return struct.pack('2f2f', 0.0, 0.0, math.cos(a) * r - 0.003, math.sin(a) * r - 0.008)
+
+def draw_rain():
+    glClear(GL_COLOR_BUFFER_BIT)
+    glColor3f(0.0, 0.0, 1.0)  # Цвет капель (синий)
+
+    for drop in raindrops:
+        draw_raindrop(drop['x'], drop['y'])
+
+    glfw.swap_buffers(window)
 
 
-vbo1 = ctx.buffer(b''.join(particle() for i in range(1024)))
-vbo2 = ctx.buffer(reserve=vbo1.size)
+def update_rain():
+    global raindrops
+    for drop in raindrops:
+        drop['y'] -= drop['speed'] * glfw.get_time()
+        if drop['y'] < 0:
+            drop['y'] = height
+            drop['x'] = random.uniform(0, width)
 
-vao1 = ctx.simple_vertex_array(transform, vbo1, ['in_pos', 'in_prev'])
-vao2 = ctx.simple_vertex_array(transform, vbo2, ['in_pos', 'in_prev'])
 
-render_vao = ctx.vertex_array(prog, [
-    (vbo1, '2f8x', ['vert']),
-])
+def main():
+    global window
 
-transform.uniforms['acc'].value = (0, -0.0001)
+    if not glfw.init():
+        return
 
-idx = 0
+    window = glfw.create_window(width, height, "Rain Animation", None, None)
+    if not window:
+        glfw.terminate()
+        return
 
-ctx.point_size = 5.0
+    glfw.make_context_current(window)
+    glOrtho(0, width, height, 0, 0, 1)
 
-while wnd.update():
-    ctx.viewport = wnd.viewport
-    ctx.clear(0.9, 0.9, 0.9)
+    glfw.set_key_callback(window, key_callback)
 
-    for i in range(8):
-        vbo1.write(particle(), offset=idx * struct.calcsize('2f2f'))
-        idx = (idx + 1) % 1024
+    while not glfw.window_should_close(window):
+        glfw.poll_events()
 
-    render_vao.render(ModernGL.POINTS, 1024)
-    vao1.transform(vbo2, ModernGL.POINTS, 1024)
-    ctx.copy_buffer(vbo1, vbo2)
+        update_rain()
+        draw_rain()
+
+    glfw.terminate()
+
+
+def key_callback(window, key, scancode, action, mods):
+    if key == glfw.KEY_ESCAPE and action == glfw.PRESS:
+        glfw.set_window_should_close(window, True)
+
+
+if __name__ == "__main__":
+    main()
