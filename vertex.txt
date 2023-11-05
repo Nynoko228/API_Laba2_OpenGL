@@ -15,7 +15,7 @@ out vec2 fragmentTexCoord;
 void main()
 {
     // gl_Position = vec4(vertexPos, 1.0); // В OpenGL позиция состоит из 4 переменных
-    gl_Position = projection * model * view * vec4(vertexPos, 1.0); // В OpenGL позиция состоит из 4 переменных
+    gl_Position = projection * view * model * vec4(vertexPos, 1.0); // В OpenGL позиция состоит из 4 переменных
     // fragmentColor = vertexColor;        // Цвет фрагемента
     fragmentTexCoord = vertexTexCoord;  // Текстура
 }

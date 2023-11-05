@@ -1,7 +1,8 @@
-#import pygame as pg
+# import pygame as pg
 import glfw
 import glfw.GLFW as GLFW_CONSTANTS
 from OpenGL.GL import *
+from OpenGL.GLU import *
 import numpy as np
 import ctypes
 from OpenGL.GL.shaders import compileProgram, compileShader
@@ -12,6 +13,7 @@ SCREEN_WIDTH = 640
 SCREEN_HEIGHT = 480
 RETURN_ACTION_CONTINUE = 0
 RETURN_ACTION_END = 1
+
 
 def init_glfw():
     glfw.init()
@@ -25,7 +27,7 @@ def init_glfw():
         GLFW_CONSTANTS.GLFW_OPENGL_FORWARD_COMPAT,
         GLFW_CONSTANTS.GLFW_TRUE
     )
-    glfw.window_hint(GLFW_CONSTANTS.GLFW_DOUBLEBUFFER, GL_FALSE) # Поставить на GL_TRUE ради 60 ФПС
+    glfw.window_hint(GLFW_CONSTANTS.GLFW_DOUBLEBUFFER, GL_FALSE)  # Поставить на GL_TRUE ради 60 ФПС
 
     window = glfw.create_window(SCREEN_WIDTH, SCREEN_HEIGHT, "Test", None, None)
     glfw.make_context_current(window)
@@ -37,6 +39,7 @@ def init_glfw():
 
     return window
 
+
 class App:
     def __init__(self, window):
         self.window = window
@@ -47,6 +50,22 @@ class App:
         self.currentTime = 0
         self.numFrames = 0
         self.frameTime = 0
+
+        self.walk_offset_lookup = {
+            1: 0,  # Все эти значения - градусы
+            2: 90,
+            3: 45,
+            4: 180,
+            6: 135,
+            7: 90,
+            8: 270,
+            9: 315,
+            10: 0,
+            11: 225,
+            12: 270,
+            13: 180
+        }
+
 
 
         # pg.init()
@@ -101,11 +120,20 @@ class App:
         running = True
         while (running):
             # Проверяем события
-            if glfw.window_should_close(self.window) or glfw.get_key(self.window, GLFW_CONSTANTS.GLFW_KEY_ESCAPE) == GLFW_CONSTANTS.GLFW_PRESS:
+            if glfw.window_should_close(self.window) or glfw.get_key(self.window,
+                                                                     GLFW_CONSTANTS.GLFW_KEY_ESCAPE) == GLFW_CONSTANTS.GLFW_PRESS:
                 running = False
 
+            # Управление клавишами и мышью
+            self.handleKeys()
+            self.handleMous()
+
+            # Чистим всё
             glfw.poll_events()
 
+            self.scene.update(self.frameTime / 16.7)  # Тут и снизу 16.7 - это для получения 60 кадров в секунду
+
+            self.render.render(self.scene)
 
             # for event in pg.event.get():
             #     if event.type == pg.QUIT:
@@ -140,9 +168,53 @@ class App:
             # pg.display.flip()
 
             # Частота кадров
-            self.clock.tick(60)
+            self.calculateFramerate()
         self.quit()
 
+    def handleMous(self):
+        (x, y) = glfw.get_cursor_pos(self.window)
+        rate = self.frameTime / 16.7
+        # Делим на 2, чтобы вычисления шли от центра экрана
+        theta_inc = rate * ((SCREEN_WIDTH / 2) - x)
+        phi_inc = rate * ((SCREEN_HEIGHT / 2) - y)
+        self.scene.spin_player(theta_inc, phi_inc)
+        glfw.set_cursor_pos(self.window, SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2)
+
+    def handleKeys(self):
+        combo = 0
+        directionModifier = 0
+        if glfw.get_key(self.window, GLFW_CONSTANTS.GLFW_KEY_W) == GLFW_CONSTANTS.GLFW_PRESS:
+            combo += 1
+        if glfw.get_key(self.window, GLFW_CONSTANTS.GLFW_KEY_A) == GLFW_CONSTANTS.GLFW_PRESS:
+            combo += 2
+        if glfw.get_key(self.window, GLFW_CONSTANTS.GLFW_KEY_S) == GLFW_CONSTANTS.GLFW_PRESS:
+            combo += 4
+        if glfw.get_key(self.window, GLFW_CONSTANTS.GLFW_KEY_D) == GLFW_CONSTANTS.GLFW_PRESS:
+            combo += 8
+
+        if combo in self.walk_offset_lookup:
+            directionModifier = self.walk_offset_lookup[combo]
+            dPos = [
+                0.1 * self.frameTime / 16.7 * np.cos(np.deg2rad(self.scene.player.theta + directionModifier)),
+                0.1 * self.frameTime / 16.7 * np.sin(np.deg2rad(self.scene.player.theta + directionModifier)),
+                0
+            ]
+            self.scene.move_player(dPos)
+
+    # Вычисляем ФПС и выводим в заголовке окна
+    def calculateFramerate(self):
+        self.currentTime = glfw.get_time()
+        delta = self.currentTime - self.lastTime
+        if (delta >= 1):
+            framerate = max(1, int(self.numFrames / delta))
+            glfw.set_window_title(self.window, f"{framerate} ФПС")
+            self.lastTime = self.currentTime
+            self.numFrames = -1
+            self.frameTime = float(1000.0 / max(1, framerate))
+        self.numFrames += 1
+
+    def quit(self):
+        self.render.quit()
     # Выход
     # def quit(self):
     #
@@ -180,6 +252,9 @@ class graphicsEngine:
         self.modelMatrixLocation = glGetUniformLocation(self.shader, "model")
         self.viewMatrixLocation = glGetUniformLocation(self.shader, "view")
 
+    def drawRain(self):
+        pass
+
     def createShader(self):
         with open("vertex.txt", 'r') as f:
             vertex_src = f.readlines()
@@ -216,7 +291,7 @@ class graphicsEngine:
             model_transform = pyrr.matrix44.multiply(
                 m1=model_transform,
                 m2=pyrr.matrix44.create_from_eulers(
-                    eulers=np.radians(self.cube.eulers),
+                    eulers=np.radians(cube.eulers),
                     dtype=np.float32
                 )
             )
@@ -224,7 +299,7 @@ class graphicsEngine:
             model_transform = pyrr.matrix44.multiply(
                 m1=model_transform,
                 m2=pyrr.matrix44.create_from_translation(
-                    vec=self.cube.position,
+                    vec=cube.position,
                     dtype=np.float32
                 )
             )
@@ -239,7 +314,6 @@ class graphicsEngine:
         self.cube_mesh.destroy()
         self.texture.destroy()
         glDeleteProgram(self.shader)
-
 
 
 class CubeMesh:
