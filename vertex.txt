@@ -1,0 +1,21 @@
+// Параметры для шейдеров
+#version 330 core
+
+layout (location=0) in vec3 vertexPos; // 0 - позиция вершины
+// layout (location=1) in vec3 vertexColor; // 1 - цвет вершины
+layout (location=1) in vec2 vertexTexCoord; // 2 - координаты текстуры
+
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+
+// out vec3 fragmentColor;
+out vec2 fragmentTexCoord;
+
+void main()
+{
+    // gl_Position = vec4(vertexPos, 1.0); // В OpenGL позиция состоит из 4 переменных
+    gl_Position = projection * model * view * vec4(vertexPos, 1.0); // В OpenGL позиция состоит из 4 переменных
+    // fragmentColor = vertexColor;        // Цвет фрагемента
+    fragmentTexCoord = vertexTexCoord;  // Текстура
+}
